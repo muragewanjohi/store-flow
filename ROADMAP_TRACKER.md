@@ -191,14 +191,14 @@ export function middleware(request: NextRequest) {
   - [ ] Test new Vendure architecture
 
 #### **Day 10 (Friday)**
-- [ ] **Vendure Integration Testing & Documentation**
-  - [ ] Test complete Vendure marketplace functionality
-  - [ ] Verify seller channel isolation
-  - [ ] Test order splitting functionality
-  - [ ] Test commission system
-  - [ ] Document Vendure architecture approach
-  - [ ] Create integration tests
-  - [ ] Plan Sprint 1 tasks with Vendure
+- [ ] **Vendure Storefront Starter Setup**
+  - [ ] Choose storefront starter: **Remix** (recommended for Next.js compatibility)
+  - [ ] Clone [Remix Storefront Starter](https://github.com/vendure-ecommerce/storefront-remix-starter)
+  - [ ] Configure storefront to connect to Vendure GraphQL API
+  - [ ] Set up basic storefront development environment
+  - [ ] Test storefront connection to Vendure backend
+  - [ ] Document storefront architecture approach
+  - [ ] Plan Sprint 1 tasks with Vendure + Storefront
 
 ---
 
@@ -267,6 +267,7 @@ export function middleware(request: NextRequest) {
   - [ ] Configure order splitting by seller
   - [ ] Set up commission calculation system
   - [ ] Test multi-vendor functionality
+  - [ ] Integrate storefront with multi-vendor features
 
 #### **Day 12 (Tuesday)**
 - [ ] **SaaS Integration Layer**
@@ -287,13 +288,13 @@ export function middleware(request: NextRequest) {
   - [ ] Test SaaS seller management
 
 #### **Day 14 (Thursday)**
-- [ ] **Storefront Customization**
-  - [ ] Customize Vendure storefront for SaaS
-  - [ ] Implement tenant-specific storefronts
-  - [ ] Configure seller product display
+- [ ] **Storefront Customization (Based on Starter)**
+  - [ ] Customize storefront starter for SaaS multi-tenancy
+  - [ ] Implement tenant-specific storefront routing
+  - [ ] Configure seller product display in storefront
   - [ ] Set up marketplace navigation
-  - [ ] Set up admin invitation system
-  - [ ] Test storefront functionality
+  - [ ] Customize storefront for multi-vendor marketplace
+  - [ ] Test storefront functionality with Vendure backend
 
 #### **Day 15 (Friday)**
 - [ ] **Vercel Multi-Tenant Domain Mapping**
