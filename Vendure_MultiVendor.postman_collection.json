@@ -1,0 +1,652 @@
+{
+	"info": {
+		"_postman_id": "vendure-multivendor-collection",
+		"name": "Vendure Multi-Vendor Marketplace",
+		"description": "Complete Postman collection for testing Vendure multi-vendor marketplace functionality",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1️⃣ Setup & Server Health",
+			"item": [
+				{
+					"name": "Check Server Health",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"{ __typename }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Schema Introspection",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query IntrospectionQuery { __schema { queryType { name fields { name description type { name kind ofType { name kind } } } } mutationType { name fields { name description type { name kind ofType { name kind } } } } } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2️⃣ Authentication",
+			"item": [
+				{
+					"name": "Login as Superadmin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Extract token from response",
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.login) {",
+									"        var userId = jsonData.data.login.id;",
+									"        var identifier = jsonData.data.login.identifier;",
+									"        ",
+									"        console.log('✅ Login successful!');",
+									"        console.log('User ID:', userId);",
+									"        console.log('Identifier:', identifier);",
+									"        ",
+									"        // Save to environment",
+									"        pm.environment.set('user_id', userId);",
+									"        pm.environment.set('identifier', identifier);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation Login($username: String!, $password: String!) { login(username: $username, password: $password) { ... on CurrentUser { id identifier channels { id code } } ... on ErrorResult { errorCode message } ... on NativeAuthStrategyError { errorCode message } ... on InvalidCredentialsError { errorCode message authenticationErrorCode } } } }\",\n  \"variables\": {\n    \"username\": \"superadmin\",\n    \"password\": \"superadmin\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"{ me { id identifier channelRoles { id code } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3️⃣ Channels (Multi-Vendor Setup)",
+			"item": [
+				{
+					"name": "Get All Channels",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { channels(options: { take: 20 }) { items { id code token sellerId defaultCurrencyCode defaultShippingZone { id name } defaultTaxZone { id name } } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Test Seller Channel",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation CreateChannel($input: CreateChannelInput!) { createChannel(input: $input) { id code token defaultCurrencyCode pricesIncludeTax ... on Channel { id code } ... on ErrorResult { errorCode message } } }\",\n  \"variables\": {\n    \"input\": {\n      \"code\": \"test-seller-{{$timestamp}}\",\n      \"token\": \"test-seller-token-{{$timestamp}}\",\n      \"defaultCurrencyCode\": \"USD\",\n      \"pricesIncludeTax\": \"PRICES_INCLUDE_TAX\",\n      \"sellerId\": 1\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Channel (Add Seller)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation UpdateChannel($input: UpdateChannelInput!) { updateChannel(input: $input) { id code token sellerId ... on Channel { id code } ... on ErrorResult { errorCode message } } }\",\n  \"variables\": {\n    \"input\": {\n      \"id\": \"1\",\n      \"sellerId\": 1\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4️⃣ Products & Variants",
+			"item": [
+				{
+					"name": "Get All Products",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { products(options: { take: 10, skip: 0 }) { items { id name slug enabled createdAt updatedAt variants { id name sku enabled stockLevel trackInventory } channelAssignments { channel { id code } } } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Product by ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query GetProduct($id: ID!) { product(id: $id) { id name slug description enabled variants { id name sku enabled stockLevel trackInventory prices { currencyCode price } } channels { id code } } }\",\n  \"variables\": {\n    \"id\": \"1\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Test Product",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation CreateProduct($input: CreateProductInput!) { createProduct(input: $input) { id name slug ... on Product { id name } ... on ErrorResult { errorCode message } } }\",\n  \"variables\": {\n    \"input\": {\n      \"translations\": [\n        {\n          \"languageCode\": \"en\",\n          \"name\": \"Test Product - {{$timestamp}}\",\n          \"slug\": \"test-product-{{$timestamp}}\",\n          \"description\": \"This is a test product for multi-vendor testing\"\n        }\n      ],\n      \"facetValueIds\": []\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5️⃣ Orders & Multi-Vendor",
+			"item": [
+				{
+					"name": "Shop API - Get Active Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { activeOrder { id code state lines { id productVariant { id name sku } sellerChannelId quantity } customer { id } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/shop-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"shop-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Shop API - Add Item to Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation AddItemToOrder($productVariantId: ID!, $quantity: Int!) { addItemToOrder(productVariantId: $productVariantId, quantity: $quantity) { ... on Order { id code lines { id productVariant { name } sellerChannelId quantity } } ... on ErrorResult { errorCode message } ... on OrderModificationError { errorCode message } } } }\",\n  \"variables\": {\n    \"productVariantId\": \"1\",\n    \"quantity\": 1\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/shop-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"shop-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Shop API - Get Eligible Shipping Methods",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { eligibleShippingMethods { id name code description metadata { } calculator { ... on ConfigurableOperation { code arguments { name value type } } } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/shop-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"shop-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Shop API - Set Order Shipping Method",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"mutation SetOrderShippingMethod($ids: [ID!]!) { setOrderShippingMethod(shippingMethodIds: $ids) { ... on Order { id code lines { id sellerChannelId quantity } shippingLines { id shippingMethod { id name } price } } ... on ErrorResult { errorCode message } } } }\",\n  \"variables\": {\n    \"ids\": [\"1\"]\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/shop-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"shop-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Admin API - Get All Orders",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { orders(options: { take: 10, skip: 0 }) { items { id code state lines { id productVariant { name } sellerChannelId quantity } shippingLines { id shippingMethod { name } } } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6️⃣ Shipping & Fulfillment",
+			"item": [
+				{
+					"name": "Get All Shipping Methods",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { shippingMethods(options: { take: 20 }) { items { id name code description enabled calculator { code arguments { name value type } } checker { code arguments { name value type } } } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Shipping Zones",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { shippingZones(options: { take: 20 }) { items { id name memberIds } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Tax Zones",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { taxZones(options: { take: 20 }) { items { id name memberIds } totalItems } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7️⃣ Multi-Vendor Testing",
+			"item": [
+				{
+					"name": "Test - Check Order Line sellerChannelId",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { activeOrder { lines { id productVariant { name } sellerChannelId quantity } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/shop-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"shop-api"
+							]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Order should have lines\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.activeOrder).to.exist;",
+									"    if (jsonData.data.activeOrder) {",
+									"        pm.expect(jsonData.data.activeOrder.lines).to.be.an('array');",
+									"        console.log('✅ Order lines:', jsonData.data.activeOrder.lines);",
+									"        ",
+									"        // Check if sellerChannelId is set",
+									"        var hasSellerChannel = jsonData.data.activeOrder.lines.some(",
+									"            line => line.sellerChannelId !== null",
+									"        );",
+									"        console.log('Multi-vendor assigned:', hasSellerChannel);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Test - Verify Multi-Vendor Order Split",
+					"description": "This query checks if orders with products from multiple sellers have different sellerChannelId values",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"query { orders(options: { take: 10 }) { items { id code lines { id sellerChannelId productVariant { name } } shippingLines { id } } } }\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:3000/admin-api",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"admin-api"
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000"
+		},
+		{
+			"key": "admin_api",
+			"value": "admin-api"
+		},
+		{
+			"key": "shop_api",
+			"value": "shop-api"
+		}
+	]
+}
+
+

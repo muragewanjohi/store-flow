@@ -11,6 +11,11 @@ import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
 import 'dotenv/config';
 import path from 'path';
+import {
+    multiVendorOrderSellerStrategy,
+    multiVendorShippingLineAssignmentStrategy,
+    multiVendorShippingEligibilityChecker,
+} from './plugins/multi-vendor-plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -56,9 +61,13 @@ export const config: VendureConfig = {
     paymentOptions: {
         paymentMethodHandlers: [dummyPaymentHandler],
     },
-    // When adding or altering custom field definitions, the database will
-    // need to be updated. See the "Migrations" section in README.md.
-    customFields: {},
+    orderOptions: {
+        orderSellerStrategy: multiVendorOrderSellerStrategy,
+    },
+    shippingOptions: {
+        shippingEligibilityCheckers: [multiVendorShippingEligibilityChecker],
+        shippingLineAssignmentStrategy: multiVendorShippingLineAssignmentStrategy,
+    },
     plugins: [
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({

@@ -119,15 +119,22 @@ export function middleware(request: NextRequest) {
   - [x] Set up authentication for Vendure ✅
   - [x] Create storage buckets for Vendure assets ✅
 
-#### **Day 4 (Thursday)**
-- [ ] **Vendure Backend Setup**
-  - [ ] Install Vendure CLI globally
-  - [ ] Create new Vendure project
-  - [ ] Install and configure Multi-Vendor Plugin
-  - [ ] Configure database connection for Vendure
-  - [ ] Set up Redis for caching/queues
-  - [ ] Test local Vendure instance
-  - [ ] Verify admin dashboard accessibility
+#### **Day 4 (Thursday)** ✅ **COMPLETED**
+- [x] **Vendure Backend Setup**
+  - [x] Install Vendure CLI globally ✅
+  - [x] Create new Vendure project ✅
+  - [x] Install and configure Multi-Vendor **Strategies** (Custom Implementation) ✅
+    - [x] Created MultiVendorOrderSellerStrategy ✅
+    - [x] Created MultiVendorShippingEligibilityChecker ✅
+    - [x] Created MultiVendorShippingLineAssignmentStrategy ✅
+    - [x] NOTE: Using custom strategies, NOT the official example plugin ✅
+    - [x] Configured strategies in vendure-config.ts ✅
+    - [x] Created MULTI_VENDOR_SETUP.md documentation ✅
+  - [x] Configure database connection for Vendure ✅
+  - [x] Set up Redis for caching/queues ✅ (using Vendure's built-in queue)
+  - [x] Test local Vendure instance ✅
+  - [x] Verify admin dashboard accessibility ✅
+  - [x] Create TESTING_GUIDE.md ✅
 
 #### **Day 5 (Friday)**
 - [ ] **Railway Deployment Setup**
@@ -165,6 +172,7 @@ export function middleware(request: NextRequest) {
 #### **Day 8 (Wednesday)**
 - [ ] **Vendure Tenant Isolation & Operator Admin**
   - [ ] Implement Vendure API middleware for tenant isolation
+  - [ ] **Implement channel isolation middleware to auto-switch sellers to their channel on login** ⭐
   - [ ] Filter products/orders/customers by seller channel
   - [ ] Enforce seller user scoping
   - [ ] Add tenant validation to Vendure API requests
