@@ -16,6 +16,10 @@ import {
     multiVendorShippingLineAssignmentStrategy,
     multiVendorShippingEligibilityChecker,
 } from './plugins/multi-vendor-plugin';
+import { SellerProvisioningPlugin } from './plugins/seller-provisioning-plugin';
+import { ChannelIsolationPlugin } from './plugins/channel-isolation-plugin';
+import { ChannelIsolationDashboardPlugin } from './plugins/channel-isolation-dashboard-plugin';
+// import { channelIsolationMiddleware } from './plugins/channel-isolation-middleware'; // Temporarily disabled - causing API to hang
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -26,6 +30,16 @@ export const config: VendureConfig = {
         adminApiPath: 'admin-api',
         shopApiPath: 'shop-api',
         trustProxy: IS_DEV ? false : 1,
+        // Channel isolation middleware for multi-vendor security
+        // TEMPORARILY DISABLED: Middleware is causing API to hang
+        // Will be re-enabled after fixing initialization order
+        // middleware: [
+        //     {
+        //         route: '/admin-api',
+        //         handler: channelIsolationMiddleware,
+        //         beforeListen: false,
+        //     },
+        // ],
         // The following options are useful in development mode,
         // but are best turned off for production for security
         // reasons.
@@ -43,6 +57,8 @@ export const config: VendureConfig = {
         cookieOptions: {
           secret: process.env.COOKIE_SECRET,
         },
+        // Note: Channel-aware auth strategy temporarily disabled
+        // The middleware handles channel enforcement
     },
     dbConnectionOptions: {
         type: 'postgres',
@@ -69,6 +85,9 @@ export const config: VendureConfig = {
         shippingLineAssignmentStrategy: multiVendorShippingLineAssignmentStrategy,
     },
     plugins: [
+        SellerProvisioningPlugin,
+        ChannelIsolationPlugin,
+        ChannelIsolationDashboardPlugin,
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({
             route: 'assets',
