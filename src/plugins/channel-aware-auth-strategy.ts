@@ -13,7 +13,6 @@ import {
     Injector,
     RequestContext,
     User,
-    AuthenticationService,
     ChannelService,
     TransactionalConnection,
     ID,
@@ -28,12 +27,10 @@ export const CHANNEL_AWARE_STRATEGY_NAME = 'channel-aware-native';
  */
 export class ChannelAwareAuthStrategy implements AuthenticationStrategy<{ username: string; password: string }> {
     readonly name = CHANNEL_AWARE_STRATEGY_NAME;
-    private authenticationService: AuthenticationService;
     private channelService: ChannelService;
     private connection: TransactionalConnection;
 
     init(injector: Injector) {
-        this.authenticationService = injector.get(AuthenticationService);
         this.channelService = injector.get(ChannelService);
         this.connection = injector.get(TransactionalConnection);
     }

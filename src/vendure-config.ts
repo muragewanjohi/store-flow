@@ -18,7 +18,6 @@ import {
 } from './plugins/multi-vendor-plugin';
 import { SellerProvisioningPlugin } from './plugins/seller-provisioning-plugin';
 import { ChannelIsolationPlugin } from './plugins/channel-isolation-plugin';
-import { ChannelIsolationDashboardPlugin } from './plugins/channel-isolation-dashboard-plugin';
 // import { channelIsolationMiddleware } from './plugins/channel-isolation-middleware'; // Temporarily disabled - causing API to hang
 
 const IS_DEV = process.env.APP_ENV === 'dev';
@@ -87,7 +86,6 @@ export const config: VendureConfig = {
     plugins: [
         SellerProvisioningPlugin,
         ChannelIsolationPlugin,
-        ChannelIsolationDashboardPlugin,
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({
             route: 'assets',

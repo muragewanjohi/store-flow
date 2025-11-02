@@ -78,6 +78,12 @@ export function channelIsolationMiddleware(
                 return next();
             }
 
+            // Explicitly block default channel (ID: 1) for sellers
+            if (ctx.channel && ctx.channel.id.toString() === '1') {
+                console.log(`[ChannelIsolation] 🚫 BLOCKED: Seller ${admin.id} attempted to access default channel (ID: 1)`);
+                // Force switch to seller's channel
+            }
+
             // Check if already on correct channel
             if (ctx.channel && ctx.channel.id === channel.id) {
                 console.log(`[ChannelIsolation] Already on correct channel ${channel.code}`);

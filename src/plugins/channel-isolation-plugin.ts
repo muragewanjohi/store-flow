@@ -9,7 +9,7 @@ import {
 } from '@vendure/core';
 import { Injectable } from '@nestjs/common';
 import { OnApplicationBootstrap } from '@nestjs/common';
-import { ChannelIsolationResolver } from './channel-isolation-resolver';
+import { ChannelIsolationResolver } from './channel-isolation-resolver-ui';
 
 @Injectable()
 export class ChannelIsolationService {
@@ -21,6 +21,7 @@ export class ChannelIsolationService {
 
     /**
      * Get the seller's assigned channel by querying the Supabase tenants table
+     * FIXED: Now properly maps user.id → administrator.id → channel
      * 
      * This integrates with Day 7's SaaS database schema where:
      * - tenants.vendure_administrator_id links to Vendure administrator.id (INTEGER)
@@ -56,14 +57,37 @@ export class ChannelIsolationService {
     }
 
     /**
+     * NEW: Get seller's channel by user ID (activeUserId)
+     * This is the key fix - Vendure uses user.id as activeUserId, not administrator.id
+     */
+    async getSellerChannelForUser(ctx: RequestContext, userId: ID): Promise<number | null> {
+        try {
+            // First, get the administrator for this user
+            const administrator = await this.administratorService.findOneByUserId(ctx, userId);
+            if (!administrator) {
+                console.log(`[ChannelIsolation] No administrator found for user ${userId}`);
+                return null;
+            }
+
+            console.log(`[ChannelIsolation] User ${userId} maps to administrator ${administrator.id} (${administrator.emailAddress})`);
+
+            // Now get the channel for this administrator
+            return await this.getSellerChannelForAdministrator(ctx, administrator.id);
+        } catch (error) {
+            console.error('[ChannelIsolation] Error mapping user to channel:', error);
+            return null;
+        }
+    }
+
+    /**
      * Alternative: Get channel using Vendure's built-in channel-seller relationship
      * Use this if you're not connecting to Supabase directly
      */
     async getSellerChannelFromVendure(ctx: RequestContext, administratorId: ID): Promise<ID | null> {
         try {
             // Get all channels with seller information
-            const channels = await this.channelService.findAll(ctx);
-            
+        const channels = await this.channelService.findAll(ctx);
+        
             // Find the channel that belongs to a seller linked to this administrator
             // This assumes your channels have sellerId field
             for (const channel of channels.items) {
@@ -76,9 +100,9 @@ export class ChannelIsolationService {
                     // For now, return the first channel with a seller
                     return channel.id;
                 }
-            }
-            
-            return null;
+        }
+
+        return null;
         } catch (error) {
             console.error('[ChannelIsolation] Error fetching channel from Vendure:', error);
             return null;
@@ -90,40 +114,41 @@ export class ChannelIsolationService {
      */
     async switchToSellerChannel(ctx: RequestContext, sellerChannelId: ID) {
         try {
-            const channel = await this.channelService.findOne(ctx, sellerChannelId);
-            
-            if (channel) {
+        const channel = await this.channelService.findOne(ctx, sellerChannelId);
+        
+        if (channel) {
                 console.log(`[ChannelIsolation] Switching to channel: ${channel.code} (ID: ${channel.id})`);
                 
-                // Create a new request context with the seller's channel
-                const newCtx = new RequestContext({
+            // Create a new request context with the seller's channel
+            const newCtx = new RequestContext({
                     req: ctx.req as any,
-                    apiType: ctx.apiType,
+                apiType: ctx.apiType,
                     channel: channel,
-                    languageCode: ctx.languageCode,
+                languageCode: ctx.languageCode,
                     isAuthorized: ctx.isAuthorized,
                     authorizedAsOwnerOnly: ctx.authorizedAsOwnerOnly,
                     session: ctx.session,
-                });
+            });
 
-                return newCtx;
-            }
-            
+            return newCtx;
+        }
+
             console.warn(`[ChannelIsolation] Channel ${sellerChannelId} not found`);
             return ctx;
         } catch (error) {
             console.error('[ChannelIsolation] Error switching channel:', error);
-            return ctx;
-        }
+        return ctx;
     }
+}
 
     /**
      * Check if an administrator is restricted to a specific channel
+     * FIXED: Now uses user.id → administrator.id mapping
      * (i.e., they are a seller, not a super admin)
      */
-    async isSellerAdministrator(ctx: RequestContext, administratorId: ID): Promise<boolean> {
+    async isSellerAdministrator(ctx: RequestContext, userId: ID): Promise<boolean> {
         try {
-            const channelId = await this.getSellerChannelForAdministrator(ctx, administratorId);
+            const channelId = await this.getSellerChannelForUser(ctx, userId);
             return channelId !== null;
         } catch (error) {
             console.error('[ChannelIsolation] Error checking if seller admin:', error);
@@ -133,13 +158,14 @@ export class ChannelIsolationService {
 
     /**
      * Get all accessible channels for an administrator
+     * FIXED: Now uses user.id → administrator.id mapping
      * For sellers, this returns only their assigned channel
      * For super admins, this returns all channels
      */
-    async getAccessibleChannels(ctx: RequestContext, administratorId: ID): Promise<ID[]> {
+    async getAccessibleChannels(ctx: RequestContext, userId: ID): Promise<ID[]> {
         try {
             // Check if this is a seller (has a specific channel)
-            const sellerChannelId = await this.getSellerChannelForAdministrator(ctx, administratorId);
+            const sellerChannelId = await this.getSellerChannelForUser(ctx, userId);
             
             if (sellerChannelId) {
                 // Seller: only their channel
@@ -193,6 +219,7 @@ export class ChannelIsolationPlugin implements OnApplicationBootstrap {
         console.log('   - Middleware: Apply in vendure-config.ts');
         console.log('   - Resolver: Add to adminApiExtensions');
         console.log('   - Auth Strategy: Add to authOptions');
+        console.log('   - UI Extension: Channel filter provider');
     }
 }
 

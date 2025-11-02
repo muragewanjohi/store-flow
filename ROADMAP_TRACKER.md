@@ -200,6 +200,15 @@ export function middleware(request: NextRequest) {
   - [ ] Set up seller-specific product management
   - [ ] Create seller signup using Vendure APIs
   - [ ] Test new Vendure architecture
+  - [ ] **Queue Isolation Testing** ⭐ NEW
+    - [ ] Create test suite for queue isolation (see QUEUE_ISOLATION_TESTING_PLAN.md)
+    - [ ] Test email job channel awareness
+    - [ ] Test search index job channel awareness
+    - [ ] Test order processing job channel awareness
+    - [ ] Test inventory update job channel awareness
+    - [ ] Test webhook job channel awareness
+    - [ ] Ensure all jobs include RequestContext with correct channel
+    - [ ] Fix any cross-channel data leakage in background jobs
 
 #### **Day 10 (Friday)**
 - [ ] **Vendure Storefront Starter Setup**
