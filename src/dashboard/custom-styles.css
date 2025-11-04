@@ -1,0 +1,36 @@
+/* Hide "Explore Enterprise Edition" menu item from user profile menu */
+/* Note: CSS has limited text-matching capabilities, so JavaScript is also injected */
+
+/* Hide by aria-label containing "Enterprise" (case variations) */
+button[aria-label*="Enterprise"],
+a[aria-label*="Enterprise"],
+button[aria-label*="enterprise"],
+a[aria-label*="enterprise"],
+button[aria-label*="ENTERPRISE"],
+a[aria-label*="ENTERPRISE"] {
+    display: none !important;
+}
+
+/* Hide by href containing "enterprise" */
+a[href*="enterprise"],
+a[href*="Enterprise"],
+a[href*="ENTERPRISE"] {
+    display: none !important;
+}
+
+/* Hide elements with classes containing "enterprise" */
+[class*="enterprise"],
+[class*="Enterprise"],
+[class*="ENTERPRISE"] {
+    display: none !important;
+}
+
+/* Hide by data attributes */
+[data-testid*="enterprise"],
+[data-testid*="Enterprise"],
+[data-testid*="ENTERPRISE"] {
+    display: none !important;
+}
+
+/* JavaScript handles text-content matching (more reliable than CSS) */
+

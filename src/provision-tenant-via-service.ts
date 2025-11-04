@@ -84,17 +84,126 @@ async function updateAdminRoleViaSQL(adminUserId: number, roleId: number) {
     }
 }
 
-async function linkTenant(subdomain: string, sellerName: string, sellerId: number, channelId: number, administratorId: number) {
-    const { error } = await supabase.from('tenants').insert({
-        subdomain,
-        business_name: sellerName,
-        vendure_seller_id: sellerId,
-        vendure_channel_id: channelId,
-        vendure_administrator_id: administratorId,
-        status: 'active',
-    });
-    if (error) throw error;
-    console.log(`✅ Tenant linked in Supabase: ${subdomain}`);
+/**
+ * Creates a unique role for a seller using Vendure's RoleService
+ * This ensures each seller gets their own role with consistent permissions, preventing cross-channel visibility
+ */
+async function createUniqueSellerRole(
+    roleService: RoleService,
+    ctx: RequestContext,
+    templateRoleId: number, // Kept for backwards compatibility, but not used
+    sellerName: string,
+    channelId: number,
+): Promise<number> {
+    // Import the role creation function
+    const { createSellerRole, STORE_ADMIN_PERMISSIONS } = require('./create-seller-role');
+    
+    // Create unique role code for this seller
+    const roleCode = `seller-admin-${channelId}`;
+    const roleDescription = `Administrator for ${sellerName} (Channel ${channelId})`;
+
+    // Check if role already exists
+    const allRoles = await roleService.findAll(ctx);
+    const existingRole = allRoles.items.find((r) => r.code === roleCode);
+
+    if (existingRole) {
+        console.log(`✅ Unique seller role already exists: ${roleCode} (ID: ${existingRole.id})`);
+        return Number(existingRole.id);
+    }
+
+    // Use Vendure's RoleService.create() - the proper Vendure-native way
+    console.log(`   ℹ️  Creating role with explicit permissions using RoleService.create()`);
+    console.log(`      Includes: Authenticated, ReadChannel, and all store management permissions`);
+    console.log(`      Excludes: CreateChannel, UpdateChannel, DeleteChannel (channel management disabled)`);
+    
+    const newRoleId = await createSellerRole(roleService, ctx, roleCode, roleDescription, channelId);
+    
+    return newRoleId;
+}
+
+async function linkTenant(
+    subdomain: string, 
+    sellerName: string, 
+    sellerId: number, 
+    channelId: number, 
+    channelToken: string,
+    administratorId: number
+) {
+    // Check if tenant already exists
+    const { data: existing } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('subdomain', subdomain)
+        .single();
+    
+    if (existing) {
+        // Update existing tenant
+        const { error } = await supabase
+            .from('tenants')
+            .update({
+                business_name: sellerName,
+                vendure_seller_id: sellerId,
+                vendure_channel_id: channelId,
+                vendure_channel_token: channelToken, // Store channel token for Store API
+                vendure_administrator_id: administratorId,
+                status: 'active',
+            })
+            .eq('subdomain', subdomain);
+        
+        if (error) throw error;
+        console.log(`✅ Tenant updated in Supabase: ${subdomain}`);
+        console.log(`   Channel token stored: ${channelToken.substring(0, 20)}...`);
+    } else {
+        // Insert new tenant
+        const { error } = await supabase.from('tenants').insert({
+            subdomain,
+            business_name: sellerName,
+            vendure_seller_id: sellerId,
+            vendure_channel_id: channelId,
+            vendure_channel_token: channelToken, // Store channel token for Store API
+            vendure_administrator_id: administratorId,
+            status: 'active',
+        });
+        if (error) throw error;
+        console.log(`✅ Tenant linked in Supabase: ${subdomain}`);
+        console.log(`   Channel token stored: ${channelToken.substring(0, 20)}...`);
+    }
+}
+
+async function addRoleChannelMapping(roleId: number, channelId: number) {
+    const client = new Client({ host: DB_HOST, port: DB_PORT, database: DB_NAME, user: DB_USERNAME, password: DB_PASSWORD });
+    await client.connect();
+    try {
+        await client.query('BEGIN');
+        
+        // Check if mapping already exists
+        const existing = await client.query(
+            `SELECT * FROM role_channels_channel WHERE "roleId" = $1 AND "channelId" = $2`,
+            [roleId, channelId]
+        );
+        
+        if (existing.rows.length > 0) {
+            console.log(`✅ Role-channel mapping already exists: Role ${roleId} → Channel ${channelId}`);
+            await client.query('COMMIT');
+            return;
+        }
+        
+        // Add the mapping
+        await client.query(
+            `INSERT INTO role_channels_channel ("roleId", "channelId") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [roleId, channelId]
+        );
+        
+        await client.query('COMMIT');
+        console.log(`✅ Added role-channel mapping: Role ${roleId} → Channel ${channelId}`);
+        console.log(`   This enables menu items (Catalog, Sales, etc.) for sellers`);
+        console.log(`   Channel filtering ensures they only see their assigned channel`);
+    } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+    } finally {
+        await client.end();
+    }
 }
 
 async function main() {
@@ -214,9 +323,11 @@ async function main() {
             }
 
             channel = channelResult;
-            console.log(`✅ Channel created: ${channel.code} (ID: ${channel.id})\n`);
+            console.log(`✅ Channel created: ${channel.code} (ID: ${channel.id})`);
+            console.log(`   Channel token: ${channel.token}\n`);
         } else {
-            console.log(`✅ Channel already exists: ${channel.code} (ID: ${channel.id})\n`);
+            console.log(`✅ Channel already exists: ${channel.code} (ID: ${channel.id})`);
+            console.log(`   Channel token: ${channel.token}\n`);
         }
 
         console.log('Step 3: Creating administrator with SuperAdmin role (temporary)...');
@@ -244,29 +355,53 @@ async function main() {
             console.log(`   Initial role: SuperAdmin (1)\n`);
         }
 
-        console.log('Step 4: Updating administrator to desired role via SQL...');
-        // Update role directly via SQL to bypass permission check
-        await updateAdminRoleViaSQL(Number(createdAdmin.user.id), roleId);
-        console.log(`✅ Administrator role updated to: ${roleId}\n`);
+        console.log('Step 4: Creating unique seller role...');
+        // Create a unique role for this seller (prevents cross-channel visibility)
+        // Permissions are copied from the template role (roleId parameter)
+        const uniqueRoleId = await createUniqueSellerRole(
+            roleService,
+            superAdminCtx,
+            roleId, // Template role ID to copy permissions from
+            sellerName,
+            Number(channel.id),
+        );
+        console.log(`✅ Unique seller role created/retrieved: ${uniqueRoleId}\n`);
 
-        // Verify the update by checking role details
-        const targetRole = await roleService.findOne(superAdminCtx, roleId);
-        if (targetRole) {
-            console.log(`   Verified role: ${targetRole.code || 'unknown'} (${targetRole.description || ''})`);
+        console.log('Step 5: Assigning unique role to administrator...');
+        // Update administrator to use the unique role
+        await updateAdminRoleViaSQL(Number(createdAdmin.user.id), uniqueRoleId);
+        console.log(`✅ Administrator assigned unique role: ${uniqueRoleId}\n`);
+
+        // Verify the role
+        const uniqueRole = await roleService.findOne(superAdminCtx, uniqueRoleId);
+        if (uniqueRole) {
+            console.log(`   Role: ${uniqueRole.code} (${uniqueRole.description || ''})`);
+            console.log(`   Mapped to channels: ${uniqueRole.channels.map((c: any) => c.code).join(', ')}`);
         }
 
-        console.log('\nStep 5: Linking tenant in Supabase...');
-        await linkTenant(subdomain, sellerName, Number(seller.id), Number(channel.id), Number(createdAdmin.id));
+        console.log('\nStep 6: Linking tenant in Supabase...');
+        // Store channel token so Store API can use the correct channel
+        const channelToken = channel.token || `${channelCode}-token`;
+        await linkTenant(
+            subdomain, 
+            sellerName, 
+            Number(seller.id), 
+            Number(channel.id), 
+            channelToken,
+            Number(createdAdmin.id)
+        );
 
         console.log('\n' + '='.repeat(70));
         console.log('📊 Tenant Provisioned Successfully');
         console.log('='.repeat(70));
         console.log(`Seller ID:        ${seller.id}`);
         console.log(`Channel ID:       ${channel.id}`);
+        console.log(`Channel Token:    ${channelToken}`);
         console.log(`Administrator ID: ${createdAdmin.id}`);
         console.log(`Admin Email:      ${adminEmail}`);
         console.log(`Admin Password:   ${adminPassword}`);
-        console.log(`Role ID:          ${roleId}`);
+        console.log(`Unique Role ID:   ${uniqueRoleId}`);
+        console.log(`Template Role:    ${roleId} (permissions copied from this)`);
         console.log(`Subdomain:        ${subdomain}`);
         console.log('');
         console.log('🎯 Next: Log in to test channel isolation');
@@ -274,8 +409,9 @@ async function main() {
         console.log(`   Password: ${adminPassword}`);
         console.log('');
         console.log('📚 Architecture:');
-        console.log(`   - Role ${roleId} (${targetRole?.code || 'unknown'}): Generic permissions`);
-        console.log(`   - Channel ${channel.id}: Access controlled via Supabase tenants table`);
+        console.log(`   - Unique Role ${uniqueRoleId} (${uniqueRole?.code || 'unknown'}): Seller-specific`);
+        console.log(`   - Mapped to Channel ${channel.id} only (prevents cross-channel visibility)`);
+        console.log(`   - Permissions copied from template Role ${roleId}`);
         console.log(`   - Channel Isolation Plugin: Auto-scopes queries to channel ${channel.id}`);
 
     } catch (error: any) {

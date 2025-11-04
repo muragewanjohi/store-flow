@@ -18,7 +18,7 @@ import {
 } from './plugins/multi-vendor-plugin';
 import { SellerProvisioningPlugin } from './plugins/seller-provisioning-plugin';
 import { ChannelIsolationPlugin } from './plugins/channel-isolation-plugin';
-// import { channelIsolationMiddleware } from './plugins/channel-isolation-middleware'; // Temporarily disabled - causing API to hang
+import { createChannelIsolationMiddlewareHandler } from './plugins/channel-isolation-middleware';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -30,15 +30,14 @@ export const config: VendureConfig = {
         shopApiPath: 'shop-api',
         trustProxy: IS_DEV ? false : 1,
         // Channel isolation middleware for multi-vendor security
-        // TEMPORARILY DISABLED: Middleware is causing API to hang
-        // Will be re-enabled after fixing initialization order
-        // middleware: [
-        //     {
-        //         route: '/admin-api',
-        //         handler: channelIsolationMiddleware,
-        //         beforeListen: false,
-        //     },
-        // ],
+        // Now uses direct DB queries to bypass permission checks on initial load
+        middleware: [
+            {
+                route: '/admin-api',
+                handler: createChannelIsolationMiddlewareHandler(), // Gets services from DI at runtime
+                beforeListen: false,
+            },
+        ],
         // The following options are useful in development mode,
         // but are best turned off for production for security
         // reasons.
@@ -115,9 +114,11 @@ export const config: VendureConfig = {
         }),
         DashboardPlugin.init({
             route: 'dashboard',
-            appDir: IS_DEV
-                ? path.join(__dirname, 'dist/dashboard')
-                : path.join(__dirname, 'dashboard'),
+            // Dashboard is built to dist/dashboard/
+            // When running with ts-node (dev), __dirname is 'src/', so path is '../dist/dashboard'
+            // When running compiled (prod), __dirname is 'dist/', so path is 'dashboard'
+            // Use absolute path from project root to avoid __dirname issues
+            appDir: path.resolve(process.cwd(), 'dist', 'dashboard'),
         }),
     ],
 };

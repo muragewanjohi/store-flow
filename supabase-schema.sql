@@ -19,6 +19,7 @@ CREATE TABLE tenants (
     owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     vendure_seller_id INTEGER, -- Links to Vendure Seller ID (integer)
     vendure_channel_id INTEGER, -- Links to Vendure Channel ID (integer)
+    vendure_channel_token VARCHAR(255), -- Channel token for Store API channel switching
     vendure_administrator_id INTEGER, -- Links to Vendure Administrator ID (integer)
     plan_id UUID REFERENCES plans(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

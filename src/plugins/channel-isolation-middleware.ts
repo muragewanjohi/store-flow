@@ -28,15 +28,54 @@ export class ChannelIsolationMiddleware implements NestModule {
 }
 
 /**
- * Middleware factory function
+ * Middleware factory function (with DI services)
+ * This version expects services to be passed in
  */
 export function channelIsolationMiddleware(
     connection: TransactionalConnection,
     channelService: ChannelService,
     administratorService: AdministratorService,
 ) {
+    return createChannelIsolationMiddlewareHandler(connection, channelService, administratorService);
+}
+
+/**
+ * Middleware handler that can be used standalone
+ * Gets services from Vendure's global Injector at runtime
+ */
+export function createChannelIsolationMiddlewareHandler(
+    connection?: TransactionalConnection,
+    channelService?: ChannelService,
+    administratorService?: AdministratorService,
+) {
     return async (req: Request & { context?: RequestContext }, res: Response, next: NextFunction) => {
         try {
+            // Get services from global Injector if not provided
+            let conn = connection;
+            let chService = channelService;
+            let admService = administratorService;
+            
+            if (!conn || !chService || !admService) {
+                try {
+                    // Try to get Injector from request (Vendure attaches it)
+                    const injector = (req as any).injector || (global as any).VendureInjector;
+                    if (injector) {
+                        if (!conn) conn = injector.get(TransactionalConnection);
+                        if (!chService) chService = injector.get(ChannelService);
+                        if (!admService) admService = injector.get(AdministratorService);
+                    }
+                } catch (e) {
+                    // If we can't get services, skip middleware (fail-open)
+                    console.warn('[ChannelIsolation] Could not get DI services, skipping middleware');
+                    return next();
+                }
+            }
+            
+            // Use the provided or retrieved services
+            const connectionToUse = conn!;
+            const channelServiceToUse = chService!;
+            const administratorServiceToUse = admService!;
+            
             // Get request context from request
             const ctx = (req as any)._ctx as RequestContext;
             
@@ -52,35 +91,121 @@ export function channelIsolationMiddleware(
                 return next();
             }
 
-            // Get administrator for this user
-            const admin = await administratorService.findOneByUserId(ctx, userId);
-            if (!admin) {
-                // Not an administrator - skip
-                return next();
+            // CRITICAL: Use direct database queries to bypass permission checks
+            // This prevents FORBIDDEN errors on initial load
+            let sellerChannelId: number | null = null;
+            let administratorId: number | null = null;
+            
+            try {
+                // Step 1: Query Vendure database directly for administrator ID (bypasses permission checks)
+                const rawConnection = connectionToUse.rawConnection;
+                const adminResult = await rawConnection.query(
+                    `SELECT id FROM administrator WHERE "userId" = $1 LIMIT 1`,
+                    [userId]
+                );
+                
+                if (adminResult && adminResult.length > 0) {
+                    administratorId = adminResult[0].id;
+                    console.log(`[ChannelIsolation] Found administrator ID ${administratorId} for user ${userId}`);
+                    
+                    // Step 2: Query Supabase for the channel (using direct DB query)
+                    if (administratorId !== null) {
+                        sellerChannelId = await getSellerChannelForAdministrator(connectionToUse, administratorId);
+                    }
+                } else {
+                    console.log(`[ChannelIsolation] No administrator found for user ${userId}`);
+                    return next();
+                }
+            } catch (e: any) {
+                console.error(`[ChannelIsolation] Error querying administrator from DB:`, e.message);
+                // Fallback: try using service (might fail due to permissions, but worth trying)
+                try {
+                    const admin = await administratorServiceToUse.findOneByUserId(ctx, userId);
+                    if (admin) {
+                        administratorId = Number(admin.id);
+                        sellerChannelId = await getSellerChannelForAdministrator(connectionToUse, administratorId);
+                    }
+                } catch (e2: any) {
+                    console.error(`[ChannelIsolation] Fallback method also failed:`, e2.message);
+                    return next();
+                }
             }
-
-            // Check if this admin is a seller (has a channel restriction)
-            const sellerChannelId = await getSellerChannelForAdministrator(connection, admin.id);
             
             if (!sellerChannelId) {
                 // Not a seller (probably super admin) - no restriction
-                console.log(`[ChannelIsolation] Admin ${admin.id} is unrestricted (super admin)`);
+                console.log(`[ChannelIsolation] Admin ${administratorId} is unrestricted (super admin)`);
                 return next();
             }
 
             // This is a seller - enforce their channel
-            console.log(`[ChannelIsolation] Admin ${admin.id} is seller - enforcing channel ${sellerChannelId}`);
+            console.log(`[ChannelIsolation] Admin ${administratorId} is seller - enforcing channel ${sellerChannelId}`);
             
-            // Get the channel
-            const channel = await channelService.findOne(ctx, sellerChannelId);
-            if (!channel) {
-                console.error(`[ChannelIsolation] Channel ${sellerChannelId} not found for admin ${admin.id}`);
-                return next();
+            // CRITICAL: Use direct database query to bypass ALL permission checks
+            // channelService.findOne() always checks ReadChannel permission, which fails for sellers
+            let channel: any = null;
+            try {
+                // Query channel directly from database to bypass permission checks
+                const rawConnection = connectionToUse.rawConnection;
+                const channelResult = await rawConnection.query(
+                    `SELECT id, code, token, "defaultLanguageCode", "defaultCurrencyCode", 
+                            "defaultShippingZoneId", "defaultTaxZoneId", "pricesIncludeTax", 
+                            "trackInventory", "outOfStockThreshold", "customFields",
+                            "createdAt", "updatedAt"
+                     FROM channel 
+                     WHERE id = $1`,
+                    [sellerChannelId]
+                );
+                
+                if (channelResult && channelResult.length > 0) {
+                    const channelData = channelResult[0];
+                    
+                    // Construct Channel object from database result
+                    // This bypasses all permission checks while maintaining type safety
+                    channel = {
+                        id: String(channelData.id),
+                        createdAt: channelData.createdAt,
+                        updatedAt: channelData.updatedAt,
+                        code: channelData.code,
+                        token: channelData.token,
+                        defaultLanguageCode: channelData.defaultLanguageCode,
+                        defaultCurrencyCode: channelData.defaultCurrencyCode,
+                        currencyCode: channelData.defaultCurrencyCode, // Deprecated but required
+                        defaultShippingZoneId: channelData.defaultShippingZoneId ? String(channelData.defaultShippingZoneId) : null,
+                        defaultTaxZoneId: channelData.defaultTaxZoneId ? String(channelData.defaultTaxZoneId) : null,
+                        pricesIncludeTax: channelData.pricesIncludeTax,
+                        trackInventory: channelData.trackInventory,
+                        outOfStockThreshold: channelData.outOfStockThreshold,
+                        availableLanguageCodes: [channelData.defaultLanguageCode], // Minimal array
+                        availableCurrencyCodes: [channelData.defaultCurrencyCode], // Minimal array
+                        customFields: channelData.customFields || {},
+                        // Relations will be null but that's okay for middleware
+                        defaultTaxZone: null,
+                        defaultShippingZone: null,
+                        seller: null,
+                    };
+                }
+                
+                if (!channel) {
+                    console.error(`[ChannelIsolation] Channel ${sellerChannelId} not found in database`);
+                    return next();
+                }
+            } catch (error: any) {
+                console.error(`[ChannelIsolation] Error fetching seller channel ${sellerChannelId}:`, error.message);
+                // Fallback: try using service (might fail, but worth trying)
+                try {
+                    channel = await channelServiceToUse.findOne(ctx, sellerChannelId);
+                    if (!channel) {
+                        return next();
+                    }
+                } catch (e: any) {
+                    console.error(`[ChannelIsolation] Fallback channelService.findOne() also failed:`, e.message);
+                    return next();
+                }
             }
 
             // Explicitly block default channel (ID: 1) for sellers
             if (ctx.channel && ctx.channel.id.toString() === '1') {
-                console.log(`[ChannelIsolation] 🚫 BLOCKED: Seller ${admin.id} attempted to access default channel (ID: 1)`);
+                console.log(`[ChannelIsolation] 🚫 BLOCKED: Seller ${administratorId} attempted to access default channel (ID: 1)`);
                 // Force switch to seller's channel
             }
 
